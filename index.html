@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Rostering App</title>
+  <meta name="theme-color" content="#ffffff" id="themeColor">
+  <script>
+    // Apply saved light/dark choice before the page draws (no flash).
+    try { if (localStorage.getItem('theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (_) {}
+  </script>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rostering App">
+  <style>
+    /* The 3 site colours — change these to restyle everything */
+    :root {
+      --color-bg: #ffffff;      /* 1. background */
+      --color-text: #111111;    /* 2. text */
+      --color-accent: #2563eb;  /* 3. accent (highlights, buttons, lines) */
+    }
+    /* Dark mode: same 3 colours, swapped */
+    :root[data-theme="dark"] {
+      --color-bg: #111111;
+      --color-text: #ffffff;
+      --color-accent: #3b82f6;
+    }
+    html, body { margin: 0; height: 100%; background: var(--color-bg); }
+    body { font-family: system-ui, -apple-system, sans-serif; color: var(--color-text); }
+    #app { min-height: 100%; }
+    .header {
+      position: sticky; top: 0; z-index: 10;
+      background: var(--color-bg);
+      border-bottom: 3px solid var(--color-accent);
+      padding: calc(env(safe-area-inset-top) + 14px) 20px 14px;
+    }
+    .header { display: flex; align-items: center; }
+    .title { margin: 0; flex: 1; font-size: 22px; font-weight: 700; text-align: center; }
+    .header-spacer { width: 44px; }
+
+    /* Menu button */
+    .menu-btn {
+      width: 44px; height: 44px; padding: 0; border: 0; background: none;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+      cursor: pointer; -webkit-appearance: none; appearance: none;
+    }
+    .menu-btn span { display: block; width: 26px; height: 3px; background: var(--color-text); border-radius: 2px; }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 30;
+      width: min(280px, 80vw);
+      background: var(--color-bg);
+      border-right: 3px solid var(--color-accent);
+      padding: calc(env(safe-area-inset-top) + 14px) 16px 16px;
+      box-sizing: border-box;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .sidebar-title { margin: 0; font-size: 18px; font-weight: 700; }
+    .close-btn {
+      width: 44px; height: 44px; border: 0; background: none; cursor: pointer;
+      font-size: 28px; line-height: 1; color: var(--color-text);
+    }
+    .backdrop {
+      position: fixed; inset: 0; z-index: 20;
+      background: rgba(0, 0, 0, 0.35);
+      opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+    }
+    .backdrop.open { opacity: 1; pointer-events: auto; }
+
+    /* Menu links */
+    .nav-link {
+      display: block; padding: 14px 12px; margin-bottom: 4px;
+      border-radius: 10px; color: var(--color-text); text-decoration: none;
+      font-size: 17px; font-weight: 500;
+    }
+    .nav-link.active { background: var(--color-accent); color: var(--color-bg); }
+    .nav-divider { height: 1px; margin: 12px 0; background: var(--color-text); opacity: 0.12; }
+
+    /* Screens */
+    .screen { display: none; padding: 20px; }
+    .screen.active { display: block; }
+    .screen h2 { margin: 0 0 12px; font-size: 20px; }
+    .muted { opacity: 0.6; }
+
+    /* Settings rows */
+    .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; }
+    .setting-label { font-size: 17px; font-weight: 500; }
+    .segmented { display: inline-flex; border: 2px solid var(--color-accent); border-radius: 10px; overflow: hidden; }
+    .segmented button {
+      border: 0; padding: 8px 16px; font: inherit; font-size: 15px; cursor: pointer;
+      background: var(--color-bg); color: var(--color-text);
+    }
+    .segmented button.active { background: var(--color-accent); color: #fff; }
+    .sub-heading { margin: 20px 0 6px; font-size: 17px; color: var(--color-accent); }
+    .sub-sub-heading { margin: 10px 0 4px; font-size: 15px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <!-- Starter template. Site content goes inside #app. -->
+  <div id="app">
+    <header class="header">
+      <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      <h1 class="title">Rostering App</h1>
+      <div class="header-spacer"></div>
+    </header>
+
+    <!-- Home (main screen) -->
+    <main class="screen" id="screen-home"></main>
+
+    <section class="screen" id="screen-settings">
+      <h2>Settings</h2>
+      <div class="setting-row">
+        <span class="setting-label">Appearance</span>
+        <div class="segmented" role="group" aria-label="Appearance">
+          <button type="button" data-theme-choice="light">Light</button>
+          <button type="button" data-theme-choice="dark">Dark</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-gallery">
+      <h2>Gallery</h2>
+      <p class="muted">No photos yet.</p>
+    </section>
+
+    <section class="screen" id="screen-values">
+      <h2>Our Values</h2>
+      <p class="muted">Values coming soon.</p>
+    </section>
+
+    <section class="screen" id="screen-contact">
+      <h2>Contact Us</h2>
+      <h3 class="sub-heading">Where to find us</h3>
+      <h4 class="sub-sub-heading">Location</h4>
+      <p class="muted">Address coming soon.</p>
+    </section>
+
+    <section class="screen" id="screen-about">
+      <h2>About</h2>
+      <p>Rostering App — a short description goes here.</p>
+      <p class="muted" id="aboutVersion"></p>
+    </section>
+  </div>
+
+  <div class="backdrop" id="backdrop"></div>
+  <nav class="sidebar" id="sidebar" aria-label="Menu" aria-hidden="true">
+    <div class="sidebar-top">
+      <h2 class="sidebar-title">Menu</h2>
+      <button class="close-btn" id="closeBtn" aria-label="Close menu">&times;</button>
+    </div>
+    <a class="nav-link" href="#home" data-screen="home">Home</a>
+    <a class="nav-link" href="#gallery" data-screen="gallery">Gallery</a>
+    <a class="nav-link" href="#values" data-screen="values">Our Values</a>
+    <a class="nav-link" href="#contact" data-screen="contact">Contact Us</a>
+
+    <div class="nav-divider"></div>
+    <a class="nav-link" href="#settings" data-screen="settings">Settings</a>
+    <a class="nav-link" href="#about" data-screen="about">About</a>
+  </nav>
+
+  <script>
+    // ---- Sidebar open / close ----
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('backdrop');
+    const menuBtn = document.getElementById('menuBtn');
+    function setMenu(open) {
+      sidebar.classList.toggle('open', open);
+      backdrop.classList.toggle('open', open);
+      menuBtn.setAttribute('aria-expanded', open);
+      sidebar.setAttribute('aria-hidden', !open);
+    }
+    menuBtn.addEventListener('click', () => setMenu(true));
+    document.getElementById('closeBtn').addEventListener('click', () => setMenu(false));
+    backdrop.addEventListener('click', () => setMenu(false));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
+
+    // ---- Screens (must match the screen-<name> ids and menu links) ----
+    const SCREENS = ['home', 'gallery', 'values', 'contact', 'settings', 'about'];
+    function showScreen() {
+      let name = location.hash.slice(1);
+      if (!SCREENS.includes(name)) name = 'home';
+      SCREENS.forEach((s) => document.getElementById('screen-' + s).classList.toggle('active', s === name));
+      document.querySelectorAll('.nav-link').forEach((a) => a.classList.toggle('active', a.dataset.screen === name));
+      setMenu(false);
+      window.scrollTo(0, 0);
+    }
+    window.addEventListener('hashchange', showScreen);
+    document.querySelectorAll('.nav-link').forEach((a) => a.addEventListener('click', () => setMenu(false)));
+    showScreen();
+
+    // ---- Light / dark mode ----
+    function applyTheme(theme) {
+      if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
+      else delete document.documentElement.dataset.theme;
+      document.getElementById('themeColor').setAttribute('content', theme === 'dark' ? '#111111' : '#ffffff');
+      document.querySelectorAll('[data-theme-choice]').forEach((b) =>
+        b.classList.toggle('active', b.dataset.themeChoice === theme));
+      try { localStorage.setItem('theme', theme); } catch (_) {}
+    }
+    document.querySelectorAll('[data-theme-choice]').forEach((b) =>
+      b.addEventListener('click', () => applyTheme(b.dataset.themeChoice)));
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  </script>
+
+  <script>
+    // ---- Auto-update: when a new version is published, the app reloads itself quietly ----
+    // APP_VERSION must match version.json — bump both on every change.
+    const APP_VERSION = '1';
+    document.getElementById('aboutVersion').textContent = 'Version ' + APP_VERSION;
+    const VERSION_URL = 'version.json';
+
+    async function checkForUpdate() {
+      try {
+        const res = await fetch(VERSION_URL + '?t=' + Date.now(), { cache: 'no-store' });
+        if (!res.ok) return;
+        const { version } = await res.json();
+        if (version === APP_VERSION) return;
+        // Only try once per new version, so a slow server can't cause a reload loop.
+        const key = 'reloaded-for-' + version;
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, '1');
+        const reg = await navigator.serviceWorker?.getRegistration();
+        if (reg) await reg.update();
+        location.reload();
+      } catch (_) { /* offline: keep running the downloaded copy */ }
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!reloaded) { reloaded = true; location.reload(); }
+      });
+    }
+
+    checkForUpdate();
+    setInterval(() => { if (!document.hidden) checkForUpdate(); }, 5000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+    window.addEventListener('focus', checkForUpdate);
+  </script>
+</body>
+</html>
